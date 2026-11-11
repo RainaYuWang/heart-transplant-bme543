@@ -20,9 +20,14 @@ scaleX = dW/ref;
 scaleY = dH/ref;
 scaleZ = dD/ref;
 
+% A three-element imresize3 argument specifies output SIZE, not scale.
+% Convert the per-axis scale factors to voxel counts before resizing.
+outputSize = ceil([size(x.data,1) size(x.data,2) size(x.data,3)] .* ...
+    [scaleX scaleY scaleZ]);
+
 for i = 1:x.NumVolumes
-   tmp = squeeze(x.data(:,:,:,i));
-   newVols(:,:,:,i) = imresize3(tmp, [scaleX scaleY scaleZ]);
+   tmp = x.data(:,:,:,i);
+   newVols(:,:,:,i) = imresize3(tmp, outputSize);
 end
 
 %% Now write new values back into struct
