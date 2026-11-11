@@ -3,15 +3,21 @@
 % heart2 - p045_a  15 months post op
 % heart3 - p045_3a 21 months post op
 
-heart1 = readDicom3D('/Users/nika/Desktop/BME543/heart-transplant-bme543/p045_2a.dcm');
-heart2 = readDicom3D('/Users/nika/Desktop/BME543/heart-transplant-bme543/p045a.dcm');
-heart3 = readDicom3D('/Users/nika/Desktop/BME543/heart-transplant-bme543/p045_3a.dcm');
+if exist('resampleDicom', 'file') == 0
+    error('heartViewer:MissingResampler', ...
+        'Add the supplied resampleDicom.m to the MATLAB path before running this script.');
+end
+dataDir = fileparts(mfilename('fullpath'));
+heart1 = resampleDicom(fullfile(dataDir, 'p045_2a.dcm'));
+heart2 = resampleDicom(fullfile(dataDir, 'p045a.dcm'));
+heart3 = resampleDicom(fullfile(dataDir, 'p045_3a.dcm'));
 
 % check sizes and voxel dimensions of the 3D heart images
 hearts = {heart1, heart2, heart3};
 names  = {'11 mo post-op', '15 mo post-op', '21 mo post-op'};
 for k = 1:3
     v = hearts{k};
+    validateHeartData(v);
     fprintf('%s: %d x %d x %d voxels, %d frames | voxel = %.3f x %.3f x %.3f | span = %.1f x %.1f x %.1f\n', ...
         names{k}, v.width, v.height, v.depth, v.NumVolumes, ...
         v.widthspan/v.width, v.heightspan/v.height, v.depthspan/v.depth, ...
@@ -23,6 +29,28 @@ heartViewer(hearts, names);
 
 
 %% ---------------- local functions ----------------
+
+function validateHeartData(v)
+    % Resampling must return data plus updated physical geometry in cm.
+    fields = {'data', 'width', 'height', 'depth', 'NumVolumes', ...
+        'widthspan', 'heightspan', 'depthspan'};
+    if ~isstruct(v) || ~isscalar(v) || ~all(isfield(v, fields))
+        error('heartViewer:ResamplerOutput', ...
+            'resampleDicom must return a scalar volume struct with data, dimensions, NumVolumes and spans in cm.');
+    end
+    dims = [v.width v.height v.depth v.NumVolumes];
+    spans = [v.widthspan v.heightspan v.depthspan];
+    if numel(dims) ~= 4 || any(~isfinite(dims) | dims < 1 | dims ~= fix(dims)) || ...
+            numel(spans) ~= 3 || any(~isfinite(spans) | spans <= 0) || ...
+            ~(isnumeric(v.data) && isreal(v.data)) || ndims(v.data) > 4 || ...
+            ~isequal([size(v.data,1) size(v.data,2) size(v.data,3) size(v.data,4)], dims)
+        error('heartViewer:ResamplerGeometry', ...
+            'Resampled data must match [width height depth NumVolumes] with positive physical spans in cm.');
+    end
+    if any(dims(1:3) < 2) || any(~isfinite(v.data(:)))
+        error('heartViewer:ResamplerData', 'Viewer requires finite 3D data with at least two voxels per spatial axis.');
+    end
+end
 
 function heartViewer(hearts, names)
 
@@ -46,16 +74,19 @@ function heartViewer(hearts, names)
     S.vols = cell(1, n);  S.vframes = cell(1, n);
     S.EDV = nan(1, n);  S.EDframe = nan(1, n);
     S.ESV = nan(1, n);  S.ESframe = nan(1, n);
+    S.completeCycle = false(1, n);
 
     % dataset dropdown
     S.popup = uicontrol(fig, 'Style', 'popupmenu', 'String', names, 'Units', 'normalized', ...
         'Position', [0.82 0.88 0.15 0.05], 'Callback', @(src, ~) switchHeart(fig, src.Value));
 
     % generate volumes button + results text
-    uicontrol(fig, 'Style', 'pushbutton', 'String', 'Generate volumes (all frames)', 'Units', 'normalized', ...
+    uicontrol(fig, 'Style', 'pushbutton', 'String', 'Measure cycle range', 'Units', 'normalized', ...
         'Position', [0.82 0.80 0.15 0.07], 'Callback', @(~,~) generateVolumes(fig));
+    uicontrol(fig, 'Style', 'pushbutton', 'String', 'Measure current LV volume', 'Units', 'normalized', ...
+        'Position', [0.82 0.72 0.15 0.07], 'Callback', @(~,~) generateVolumes(fig, true));
     S.resultText = uicontrol(fig, 'Style', 'text', 'Units', 'normalized', ...
-        'Position', [0.81 0.30 0.18 0.46], 'BackgroundColor', 'k', 'ForegroundColor', 'w', ...
+        'Position', [0.81 0.28 0.18 0.43], 'BackgroundColor', 'k', 'ForegroundColor', 'w', ...
         'HorizontalAlignment', 'left', 'FontSize', 11);
 
     % frame slider + typed box
@@ -136,10 +167,22 @@ end
 function updateResults(S)
     k = S.k;
     L = {S.popup.String{k}, ''};
-    if isnan(S.EDV(k))
+    if isempty(S.vols{k})
         L{end+1} = 'No volumes yet.';
-        L{end+1} = 'Click "Generate volumes".';
+        L{end+1} = 'Measure a cycle or current frame.';
     else
+        f = round(S.frameSlider.Value);
+        i = find(S.vframes{k} == f, 1);
+        if ~isempty(i)
+            L{end+1} = sprintf('Frame %d LV = %.1f mL', f, S.vols{k}(i));
+        else
+            L{end+1} = sprintf('Frame %d: not measured', f);
+        end
+        if ~S.completeCycle(k)
+            L{end+1} = 'No complete cycle measured; EF unavailable.';
+            S.resultText.String = L;
+            return;
+        end
         L{end+1} = sprintf('ED (max): frame %d', S.EDframe(k));
         L{end+1} = sprintf('EDV = %.1f mL', S.EDV(k));
         L{end+1} = '';
@@ -172,7 +215,8 @@ end
 
 %% ---------------- volume over time (ellipsoid method)  ----------------
 
-function generateVolumes(fig)
+function generateVolumes(fig, currentOnly)
+    if nargin < 2, currentOnly = false; end
     S = guidata(fig);
     S.playBtn.Value = 0;  S.playBtn.String = 'Play';
     k  = S.k;
@@ -180,12 +224,24 @@ function generateVolumes(fig)
     c  = round(S.colSlider.Value);          % long-axis slice used for every frame
     F  = ds.NumVolumes;
 
-    % how many frames to measure
-    ans_ = inputdlg(sprintf('Measure every Nth frame (1 = all %d frames):', F), 'Frame step', 1, {'1'});
-    if isempty(ans_), return; end
-    step = round(str2double(ans_{1}));
-    if isnan(step) || step < 1, step = 1; end
-    frames = 1:step:F;
+    if currentOnly
+        frames = round(S.frameSlider.Value);
+    else
+        % User identifies one cardiac cycle; both endpoints are included.
+        while true
+            ans_ = inputdlg({sprintf('First frame of one cycle (1-%d):', F), ...
+                sprintf('Last frame of that cycle (1-%d):', F)}, ...
+                'Select one cardiac cycle', 1, {num2str(round(S.frameSlider.Value)), num2str(F)});
+            if isempty(ans_), return; end
+            first = str2double(ans_{1}); last = str2double(ans_{2});
+            if isfinite(first) && isfinite(last) && first == fix(first) && ...
+                    last == fix(last) && first >= 1 && last <= F && first < last
+                break;
+            end
+            uiwait(errordlg('Enter integer frames satisfying 1 <= first < last <= frame count.', 'Invalid range'));
+        end
+        frames = first:last;
+    end
     vols = nan(size(frames));
     ann  = nan(size(frames));
 
@@ -204,48 +260,73 @@ function generateVolumes(fig)
         end
     end
 
-    valid = ~isnan(vols);
-    if nnz(valid) < 2
-        fprintf('Fewer than 2 frames measured, so no ED/ES was computed.\n');
+    valid = isfinite(vols) & vols > 0;
+    if ~any(valid)
+        fprintf('No measurements accepted; previous results retained.\n');
         return;
     end
     fr = frames(valid);  v = vols(valid);
-
-    % ED = max volume, ES = min volume
-    [EDV, iED] = max(v);
-    [ESV, iES] = min(v);
+    completeCycle = ~currentOnly && all(valid);
     S = guidata(fig);
     S.vols{k} = v;  S.vframes{k} = fr;
-    S.EDV(k) = EDV;  S.EDframe(k) = fr(iED);
-    S.ESV(k) = ESV;  S.ESframe(k) = fr(iES);
-    guidata(fig, S);
+    S.completeCycle(k) = completeCycle;
+    S.EDV(k) = nan; S.ESV(k) = nan;
+    S.EDframe(k) = nan; S.ESframe(k) = nan;
 
-    EF = (EDV - ESV) / EDV * 100;
-    fprintf('\n%s (slice %d)\n  ED = frame %d, EDV = %.1f mL\n  ES = frame %d, ESV = %.1f mL\n  SV = %.1f mL, EF = %.1f %%\n', ...
-        S.popup.String{k}, c, fr(iED), EDV, fr(iES), ESV, EDV - ESV, EF);
-    if iED == 1 || iED == numel(fr) || iES == 1 || iES == numel(fr)
-        fprintf('  Note: ED or ES is at the first/last measured frame. The scan may start or end mid-cycle.\n');
+    results = table(repmat(S.popup.String(k), numel(fr), 1), ...
+        repmat(c, numel(fr), 1), fr(:), v(:), reshape(ann(valid), [], 1), ...
+        'VariableNames', {'Dataset', 'Slice', 'Frame', 'LVVolume_mL', 'AnnulusDiameter_cm'});
+    disp(results);
+    if completeCycle
+        [EDV, iED] = max(v);
+        [ESV, iES] = min(v);
+        S.EDV(k) = EDV; S.EDframe(k) = fr(iED);
+        S.ESV(k) = ESV; S.ESframe(k) = fr(iES);
+        EF = (EDV - ESV) / EDV * 100;
+        fprintf('Selected cycle %d-%d: EDV %.1f mL, ESV %.1f mL, SV %.1f mL, EF %.1f %%\n', ...
+            frames(1), frames(end), EDV, ESV, EDV - ESV, EF);
+        S.frameSlider.Value = fr(iED);
+    else
+        fprintf('LV volumes retained; EF not computed without a fully measured cycle range.\n');
+        S.frameSlider.Value = fr(1);
     end
+    guidata(fig, S);
+    updateView(fig);
 
-    % volume curve
+    resultFig = figure('Name', 'LV volume measurements (ellipsoid estimate)', 'NumberTitle', 'off');
+    uitable(resultFig, 'Data', table2cell(results), ...
+        'ColumnName', results.Properties.VariableNames, 'Units', 'normalized', ...
+        'Position', [0.02 0.15 0.96 0.83]);
+    uicontrol(resultFig, 'Style', 'pushbutton', 'String', 'Save CSV', ...
+        'Units', 'normalized', 'Position', [0.72 0.03 0.25 0.08], ...
+        'Callback', @(~,~) saveVolumeResults(results));
+
     figure('Name', 'LV volume curve', 'NumberTitle', 'off');
     plot(fr, v, '-o', 'LineWidth', 1.2); hold on;
-    plot(fr(iED), EDV, 'r*', 'MarkerSize', 12);
-    plot(fr(iES), ESV, 'b*', 'MarkerSize', 12);
     xlabel('Frame'); ylabel('LV volume (mL)'); grid on;
-    title(sprintf('%s | EDV %.1f, ESV %.1f, EF %.1f%%', S.popup.String{k}, EDV, ESV, EF));
-    legend('Volume', 'ED (max)', 'ES (min)', 'Location', 'best');
+    if completeCycle
+        plot(fr(iED), EDV, 'r*', 'MarkerSize', 12);
+        plot(fr(iES), ESV, 'b*', 'MarkerSize', 12);
+        title(sprintf('%s | EDV %.1f, ESV %.1f, EF %.1f%%', S.popup.String{k}, EDV, ESV, EF));
+        legend('Volume', 'ED (max)', 'ES (min)', 'Location', 'best');
+    else
+        title(sprintf('%s | LV volume (no cycle EF)', S.popup.String{k}));
+    end
 
-    % annulus diameter over time
     figure('Name', 'Mitral annulus', 'NumberTitle', 'off');
     plot(fr, ann(valid), '-o', 'LineWidth', 1.2); grid on;
     xlabel('Frame'); ylabel('Annulus diameter (cm)');
-    title([S.popup.String{k} ' | mitral annulus diameter over the cycle']);
+    title([S.popup.String{k} ' | mitral annulus diameter']);
+end
 
-    % jump the viewer to the ED frame
-    S.frameSlider.Value = fr(iED);
-    guidata(fig, S);
-    updateView(fig);
+function saveVolumeResults(results)
+    [file, folder] = uiputfile('*.csv', 'Save LV volume measurements', 'lv_volumes.csv');
+    if isequal(file, 0), return; end
+    try
+        writetable(results, fullfile(folder, file));
+    catch err
+        errordlg(err.message, 'Could not save measurements');
+    end
 end
 
 function [V, annDiam, status] = measureFrame(ds, c, f, dx, dy, dz, n, nTotal)
@@ -312,6 +393,12 @@ function [V, annDiam, status] = measureFrame(ds, c, f, dx, dy, dz, n, nTotal)
     s2 = norm([diff(xs2), diff(ys2)]);
 
     V = (4/3) * pi * (Dmaj/2) * (s1/2) * (s2/2);     % cm^3 = mL
+    if ~isfinite(V) || V <= 0
+        uiwait(errordlg('Diameters must be positive. Please measure this frame again.', 'Invalid measurement'));
+        if isvalid(fg2), close(fg2); end
+        status = 'no';
+        return;
+    end
 
     title(ax2, sprintf('Frame %d: long %.2f, short %.2f x %.2f, annulus %.2f cm, volume %.1f mL', ...
         f, Dmaj, s1, s2, annDiam, V), 'Color', 'w', 'FontSize', 12);
