@@ -24,6 +24,16 @@ cycle automatically. For each frame, click the two annulus hinge points,
 the apex, and the endpoints of two perpendicular cavity diameters on the
 displayed cross-section. Accept or redo each measurement.
 
+Starting with the second frame in a cycle measurement, gray dashed lines and
+open circles show the previous accepted frame's annulus points, apex, and
+short-axis diameter endpoints. Current measurements remain colored. The label
+identifies the reference frame; short-axis views also show both depth indices
+and flag different depths, since these are positional guides rather than
+tracked anatomy. Click all points anew for the current frame. Only **Yes**
+advances the reference; **No** keeps the previous accepted frame as the guide.
+Each new measurement run starts without reference points, including standalone
+current-frame measurements.
+
 **Measure current LV volume** measures just the frame currently displayed;
 it does not compute EF. Both modes show a per-frame LV volume table and
 curve. Use **Save CSV** in the results window to save dataset, slice, frame,
@@ -48,3 +58,8 @@ with the supplied resampler and real study files. Check a valid cycle range,
 invalid/noninteger/out-of-bounds ranges, redo and cancellation, a single-frame
 measurement, dataset switching, and CSV export. Confirm resampled physical
 spans and voxel spacing before interpreting the volume measurements.
+For reference overlays, measure two consecutive frames and check both views;
+redo the second frame to confirm the first frame remains the reference. Accept
+the second frame and check that the third now references it. Check the depth
+label when short-axis depth changes, and verify that a new range or another
+dataset starts without old reference points.

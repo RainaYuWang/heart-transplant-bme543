@@ -250,11 +250,16 @@ function generateVolumes(fig, currentOnly)
     dy = ds.heightspan / ds.height;
     dz = ds.depthspan  / ds.depth;
 
+    % Reference belongs only to this run/dataset/slice and advances on Yes.
+    previousPoints = [];
     n = 1;
     while n <= numel(frames)
-        [V, A, status] = measureFrame(ds, c, frames(n), dx, dy, dz, n, numel(frames));
+        [V, A, status, points] = measureFrame(ds, c, frames(n), dx, dy, dz, n, numel(frames), previousPoints);
         switch status
-            case 'yes',    vols(n) = V;  ann(n) = A;  n = n + 1;
+            case 'yes'
+                vols(n) = V; ann(n) = A;
+                previousPoints = points;
+                n = n + 1;
             case 'no'      % redo the same frame
             case 'cancel', break;
         end
@@ -329,8 +334,8 @@ function saveVolumeResults(results)
     end
 end
 
-function [V, annDiam, status] = measureFrame(ds, c, f, dx, dy, dz, n, nTotal)
-    V = nan;  annDiam = nan;  status = 'cancel';
+function [V, annDiam, status, points] = measureFrame(ds, c, f, dx, dy, dz, n, nTotal, previousPoints)
+    V = nan;  annDiam = nan;  status = 'cancel'; points = [];
     gmin = double(min(ds.data(:)));  gmax = double(max(ds.data(:)));
 
     % long-axis slice
@@ -344,6 +349,7 @@ function [V, annDiam, status] = measureFrame(ds, c, f, dx, dy, dz, n, nTotal)
     imagesc(ax, xcm, zcm, img); colormap(ax, gray); hold(ax, 'on');
     axis(ax, 'image');  clim(ax, [gmin gmax]);
     styleAxes(ax, xcm, zcm);
+    drawPreviousPoints(ax, previousPoints, 'long', []);
 
     ttl = sprintf('Frame %d (%d of %d): click the two MITRAL ANNULUS hinge points', f, n, nTotal);
     [xa, ya] = clickLine(fg, ax, ttl, 'c');
@@ -378,6 +384,7 @@ function [V, annDiam, status] = measureFrame(ds, c, f, dx, dy, dz, n, nTotal)
     imagesc(ax2, xcm2, ycm2, img2); colormap(ax2, gray); hold(ax2, 'on');
     axis(ax2, 'image');  clim(ax2, [gmin gmax]);
     styleAxes(ax2, xcm2, ycm2);
+    drawPreviousPoints(ax2, previousPoints, 'short', d0);
     plot(ax2, xmid, (c - 0.5) * dy, 'y+', 'MarkerSize', 14, 'LineWidth', 2);
 
     ttl = sprintf('Frame %d: SHORT AXIS 1 (depth %d). Click wall to wall across the cavity (long axis = %.2f cm)', f, d0, Dmaj);
@@ -406,10 +413,42 @@ function [V, annDiam, status] = measureFrame(ds, c, f, dx, dy, dz, n, nTotal)
     if isvalid(fg2), close(fg2); end
 
     switch resp
-        case 'Yes',    status = 'yes';
+        case 'Yes'
+            status = 'yes';
+            % All coordinates are physical cm, matching the displayed axes.
+            points = struct('frame', f, 'depth', d0, ...
+                'annulus', [xa(:) ya(:)], 'apex', [x0 y0], ...
+                'short1', [xs1(:) ys1(:)], 'short2', [xs2(:) ys2(:)]);
         case 'No',     status = 'no';
         otherwise,     status = 'cancel';
     end
+end
+
+function drawPreviousPoints(ax, previous, view, currentDepth)
+    if isempty(previous), return; end
+    referenceColor = [0.65 0.65 0.65];
+    if strcmp(view, 'long')
+        mid = mean(previous.annulus, 1);
+        lines = {previous.annulus, [mid; previous.apex]};
+        label = sprintf('Gray dashed: accepted frame %d (reference only)', previous.frame);
+    else
+        lines = {previous.short1, previous.short2};
+        label = sprintf('Gray dashed: accepted frame %d, depth %d (current depth %d)', ...
+            previous.frame, previous.depth, currentDepth);
+        if previous.depth ~= currentDepth
+            label = {label, 'Different depth slices: use points only as a positional guide.'};
+        end
+    end
+    for j = 1:numel(lines)
+        xy = lines{j};
+        plot(ax, xy(:,1), xy(:,2), '--o', 'Color', referenceColor, ...
+            'LineWidth', 1, 'MarkerSize', 7, 'MarkerFaceColor', 'none', ...
+            'HitTest', 'off', 'PickableParts', 'none');
+    end
+    text(ax, 0.02, 0.02, label, 'Units', 'normalized', ...
+        'Color', referenceColor, 'BackgroundColor', 'k', 'FontSize', 9, ...
+        'VerticalAlignment', 'bottom', 'Interpreter', 'none', ...
+        'HitTest', 'off', 'PickableParts', 'none');
 end
 
 function styleAxes(ax, xcm, ycm)
