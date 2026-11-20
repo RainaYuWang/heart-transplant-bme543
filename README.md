@@ -1,5 +1,17 @@
 # heart-transplant-bme543
 
+## Wall thickness: two versions / 壁厚测量
+
+Run `wall_thickness` to select one DICOM, or `wall_thickness(heart1)` with
+already loaded data. The viewer also has a **壁厚 A / B（含说明）** button.
+Chinese instructions explain A (reviewed local intensity-profile measurement)
+and B (reviewed 3D segmentation and inner-to-outer surface distance).
+Download the whole repository, including the `+wall` folder.
+See [中文操作说明与限制](WALL_THICKNESS_GUIDE.md).
+These are research prototypes, not validated on the project images.
+Synthetic MATLAB tests are in `tests/test_wall_algorithms.m`; they require
+MATLAB and Image Processing Toolbox and have not run in the cloud environment.
+
 ## MATLAB workflow
 
 Use MATLAB R2022a or newer with Image Processing Toolbox (`imresize3`)

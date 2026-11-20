@@ -110,12 +110,20 @@ function heartViewer(hearts, names)
         'Callback', @(~,~) typedValue(fig, 'slice'));
 
     % play button
+    uicontrol(fig, 'Style', 'pushbutton', 'String', '壁厚 A / B（含说明）', 'Units', 'normalized', ...
+        'Position', [0.81 0.21 0.18 0.06], 'Callback', @(~,~) startWallThickness(fig));
     S.playBtn = uicontrol(fig, 'Style', 'togglebutton', 'String', 'Play', 'Units', 'normalized', ...
         'Position', [0.82 0.12 0.15 0.05], 'Callback', @(~,~) playFrames(fig));
 
     guidata(fig, S);
     updateView(fig);
 
+end
+
+function startWallThickness(fig)
+    S = guidata(fig);
+    S.playBtn.Value = 0; S.playBtn.String = 'Play';
+    wall_thickness(S.hearts{S.k});
 end
 
 function typedValue(fig, which)
