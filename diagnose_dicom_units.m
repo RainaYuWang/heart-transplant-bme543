@@ -20,7 +20,7 @@ safeFields={'Rows','Columns','NumberOfFrames','PixelSpacing','ImagerPixelSpacing
     'RegionLocationMinX0','RegionLocationMinY0','RegionLocationMaxX1','RegionLocationMaxY1', ...
     'Private_3001_1001','Private_3001_1003'};
 report=struct('Format','Geometry-only DICOM unit report','Fields',struct());
-report.ReportVersion=2;
+report.ReportVersion=3;
 report.MetadataReadErrorIdentifier=metadataError;
 report.MetadataClass=class(info);
 report.MetadataSize=size(info);
@@ -29,6 +29,7 @@ report.Fields=collect(info);
 % Independently inspect the flat explicit-little-endian header used by the
 % supplied Philips reader. Unknown layouts are reported, never guessed.
 report.RawHeader=scanLegacyHeader(filename);
+report.LegacyHeader=scanReaderCompatibleHeader(filename);
 report.Notes={ ...
     'PhysicalUnitsXDirection/YDirection code 3 denotes cm for that region axis.', ...
     'PixelSpacing uses mm. Do not substitute it for vendor-specific volume geometry without verification.', ...
@@ -49,7 +50,7 @@ end
 text=jsonencode(report,'PrettyPrint',true);
 disp(text);
 if nargin<2
-    [file,folder]=uiputfile('*.txt','Save geometry-only report','dicom_units_report_v2.txt');
+    [file,folder]=uiputfile('*.txt','Save geometry-only report','dicom_units_report_v3.txt');
     if isequal(file,0), return; end
     outputFile=fullfile(folder,file);
 end
@@ -148,6 +149,49 @@ for k=1:5000
         % handles nested regions; a flat scan must not claim their absence.
         result.SequenceValuesSkipped=true;
     end
+end
+result.Status='tag_limit_reached';
+end
+
+function result=scanReaderCompatibleHeader(filename)
+% Mirror readDicom3D's original Sonos OB handling. This is a separate
+% compatibility scan, not a generic DICOM parser or automatic calibration.
+result=struct('Status','not_read','Fields',struct());
+fid=fopen(filename,'r','ieee-le');
+if fid<0, result.Status='cannot_open'; return; end
+cleanup=onCleanup(@() fclose(fid));
+fseek(fid,0,'eof'); fileSize=ftell(fid); fseek(fid,132,'bof');
+for k=1:200
+    tag=fread(fid,2,'uint16');
+    if numel(tag)~=2, result.Status='truncated_header'; return; end
+    if isequal(tag,[hex2dec('7FE0');hex2dec('0010')])
+        result.Status='reached_pixel_data'; return;
+    end
+    vr=char(fread(fid,2,'*char').'); len=fread(fid,1,'uint16');
+    if numel(vr)~=2 || ~all(vr>='A' & vr<='Z') || isempty(len)
+        result.Status='unsupported_layout'; return;
+    end
+    if ftell(fid)+len>fileSize, result.Status='invalid_length'; return; end
+    name=''; type=''; bytes=0;
+    if tag(1)==hex2dec('0018')
+        switch tag(2)
+            case hex2dec('6024'), name='PhysicalUnitsXDirection'; type='uint16'; bytes=2;
+            case hex2dec('6026'), name='PhysicalUnitsYDirection'; type='uint16'; bytes=2;
+            case hex2dec('602C'), name='PhysicalDeltaX'; type='double'; bytes=8;
+            case hex2dec('602E'), name='PhysicalDeltaY'; type='double'; bytes=8;
+        end
+    elseif tag(1)==hex2dec('3001') && tag(2)==hex2dec('1003')
+        name='PrivateDepthSpacing'; type='double'; bytes=8;
+    end
+    if ~isempty(name) && len==bytes
+        value=fread(fid,1,type);
+        if isfield(result.Fields,name), result.Fields.(name)(end+1)=value;
+        else, result.Fields.(name)=value; end
+    else
+        fseek(fid,len,'cof');
+    end
+    % Exactly the extra six bytes skipped by the supplied Sonos reader.
+    if strcmp(vr,'OB'), fseek(fid,6,'cof'); end
 end
 result.Status='tag_limit_reached';
 end

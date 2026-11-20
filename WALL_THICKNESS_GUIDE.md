@@ -87,7 +87,8 @@ not. For identical points, a 1-4 mm result would become 10-40 mm if cm were
 selected. This is not a way to calibrate against an expected range.
 
 Run `diagnose_dicom_units`, select the original DICOM, and save the small
-`dicom_units_report_v2.txt`. Version 2 also scans the flat explicit-little-endian
+`dicom_units_report_v3.txt`. Version 3 also includes a separate scan matching the supplied Sonos reader
+(including its six-byte OB skip). The standard scan inspects the flat explicit-little-endian
 header used by the legacy reader, reports metadata field names and handles
 metadata struct arrays/cells. Unsupported layouts are identified explicitly.
 It includes only whitelisted geometry/unit values
@@ -98,7 +99,7 @@ and must be verified separately. No automatic unit inference has been added.
 
 A report containing `Fields: {}` has not established the source units. The
 reported raw voxel spacing alone supports a field-of-view plausibility check,
-not a verified calibration. Version 2 prints field of view under both cm and
+not a verified calibration. The report prints field of view under both cm and
 mm assumptions to make that distinction explicit.
 
 The uploaded study exceeded the 32 MiB attachment-transfer limit, so its actual
