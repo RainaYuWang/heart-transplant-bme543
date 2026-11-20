@@ -97,7 +97,7 @@ end
             plot(profileAx,p.distance,p.intensity,'Color',colors(selected,:));
         end
         title(profileAx,names{selected}); xlabel(profileAx,'Distance (mm)'); ylabel(profileAx,'Brightness');
-        message.String='Review every site. Missing boundaries must be drawn or explicitly skipped. Units use your declared calibration.';
+        message.String='Review every site. Draw or skip missing boundaries. Source spacing assumes cm; results show mm and cm (10 mm = 1 cm).';
     end
     function setBusy(tf)
         busy=tf;

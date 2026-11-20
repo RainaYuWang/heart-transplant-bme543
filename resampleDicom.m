@@ -1,4 +1,7 @@
-% script to resample the 3D data to equal sample sizes in all dimensions
+% Resample the 3D data to equal sample sizes in all dimensions.
+% Spacing and spans retain their original numerical length unit here.
+% This function does not detect units or convert cm to mm. The wall_thickness
+% entry point assumes cm for this project and converts spacing to mm once.
 %clear
 function [x] = resampleDicom(filename)
 %% parameters of the output

@@ -12,7 +12,10 @@ No volume measurement or ED/ES linkage is required or used. The 3D workflow
 has been removed. Download the whole repository, including `+wall`.
 Run `demo_wall_thickness` to preview the actual MATLAB result layout with
 synthetic data, without DICOM. See [User guide](WALL_THICKNESS_GUIDE.md).
-Run `diagnose_dicom_units` to export a small geometry-only unit report.
+This project assumes original X/Y/Z spacing is in cm, as requested by the user.
+The wall workflow converts spacing to mm once and labels the assumption in
+results. The DICOM unit tags did not verify this convention.
+Run `diagnose_dicom_units` only if further metadata investigation is needed.
 Real-image accuracy, unit calibration and MATLAB GUI behavior still require local validation.
 
 ## MATLAB workflow

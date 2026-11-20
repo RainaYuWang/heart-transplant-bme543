@@ -12,10 +12,11 @@ instructions = {
     'Review all six sites in one maximized window. Drag endpoints and click Accept frame / Next once per frame.';
     'Draw approximately perpendicular to the local wall. A fixed slice cannot guarantee tracking the same 3D tissue.';
     'Correct or skip individual sites without affecting the other five sites.';
-    'Select the frame range and verify length units. Without frame timing, the x-axis shows frame numbers.';
+    'Original X/Y/Z spacing is assumed to be in cm for this project. Thickness is calculated in mm (1 cm = 10 mm).';
+    'Select the frame range. Without frame timing, the x-axis shows frame numbers.';
     'Volume measurement is not required. ED/ES, EF and volume results are not used.';
     'Stopping retains earlier accepted frames. Unaccepted changes in the current frame are discarded.';
-    'Use diagnose_dicom_units to inspect calibration. Never select units to force an expected thickness range.';
+    'The cm assumption is user-specified, not verified by DICOM unit tags. Resampling does not determine units.';
     'Run demo_wall_thickness to preview the result layout with synthetic data.'};
 uiwait(helpdlg(instructions, 'How to use: six-site local wall thickness'));
 if exist('imresize3', 'file') == 0
@@ -38,14 +39,11 @@ assert(numel(dims) == 4 && all(isfinite(dims)) && all(dims == fix(dims)) && ...
 spacing = [ds.widthspan ds.heightspan ds.depthspan] ./ dims(1:3);
 assert(all(isfinite(spacing) & spacing > 0), 'wall:Spacing', 'Voxel spacing must be finite and positive.');
 rawSpacing=spacing;
-unit = questdlg({'Original spacing units must be verified from the source, not from expected thickness.', ...
-    sprintf('Stored spacing: %.6g, %.6g, %.6g per voxel.',spacing), ...
-    'cm multiplies ALL values by 10 to report mm; mm leaves values unchanged.', ...
-    'If unknown, Cancel and run diagnose_dicom_units.'}, ...
-    'Confirm units', 'cm', 'mm', 'Cancel', 'Cancel');
-if strcmp(unit, 'cm'), spacing = spacing * 10;
-elseif ~strcmp(unit, 'mm'), return;
-end
+% Project convention authorized by the user; not inferred from unit tag 0.
+% Keep the input struct unchanged. Convert only this local spacing vector.
+unit = 'cm';
+spacing = rawSpacing * 10;
+fprintf('Source spacing assumed cm; measurement spacing (mm/voxel): %.6g %.6g %.6g\n',spacing);
 settings = inputdlg({'First frame (inclusive)','Last frame (inclusive)', ...
     'Frame interval in ms (known and constant only; otherwise leave blank)'}, 'Frame range', 1, ...
     {'1',num2str(ds.NumVolumes),''});
@@ -63,8 +61,9 @@ if isempty(result), return; end
 result.spacing_mm = spacing;
 result.raw_spacing = rawSpacing;
 result.declared_source_unit = unit;
-result.calibration_status = 'user_declared_not_automatically_verified';
+result.calibration_status = 'cm_assumed_by_user_not_DICOM_verified';
 result.table.Thickness_cm = result.table.Thickness_mm / 10;
+result.table.SourceUnitAssumption = repmat({'cm (user assumption)'},height(result.table),1);
 result.frame_interval_s = dt;
 result.source_dimensions = dims;
 if isfinite(dt)

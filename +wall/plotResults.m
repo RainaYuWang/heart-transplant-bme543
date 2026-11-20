@@ -27,5 +27,7 @@ grid(curveAx,'on'); xlabel(curveAx,label); ylabel(curveAx,'Thickness (mm)');
 legend(curveAx,'Location','best'); title(curveAx,'Six-site thickness over time (gaps = missing data)');
 if isfield(result,'is_demo') && result.is_demo
     title(layout,'SYNTHETIC DEMO - Not real measurements');
+elseif isfield(result,'calibration_status')
+    title(layout,'Source spacing: cm assumed by user | Thickness: mm | 10 mm = 1 cm');
 end
 end

@@ -19,7 +19,8 @@ a gap. This is a layout demonstration, not a measurement or accuracy test.
 
 1. Run `wall_thickness` to select a DICOM, or `wall_thickness(heart1)` to use
    loaded data. Alternatively, click **Wall thickness (6 sites)** in the viewer.
-2. Verify the original length units (cm or mm) and select the first and last
+2. Source spacing in all three directions is assumed to be cm, as requested
+   for this project; there is no unit-selection dialog. Select the first and last
    frame. Enter a frame interval in milliseconds only if it is known and
    constant; otherwise leave it blank.
 3. Enter the long-axis slice number (the original viewer's Slice), thickness
@@ -55,7 +56,8 @@ Each CSV row represents one frame and one site: `Frame`, `SiteID` (1-6),
 NaN, not zero. Site names are exported in English.
 
 The MAT file also stores the first-frame image and initial lines, per-frame
-and per-site boundary/search-line coordinates, units and settings, including the declared source unit and its unverified calibration status.
+and per-site boundary/search-line coordinates, units and settings, including the fixed cm source-unit assumption and its unverified calibration status.
+CSV exports also include `SourceUnitAssumption` so the assumption travels with the measurements.
 
 ## Limitations and validation
 
@@ -79,30 +81,32 @@ second frame, correcting/skipping one site, missing values after stopping
 partway through a frame, and the correspondence between curves and CSV site
 labels. Try a few frames before measuring a complete cycle.
 
-## Verify units before interpreting values
+## Project unit convention and resampling
 
-The unit selection describes the original spacing unit, not the display unit.
-Choosing cm multiplies the stored spacing by 10 for mm output; choosing mm does
-not. For identical points, a 1-4 mm result would become 10-40 mm if cm were
-selected. This is not a way to calibrate against an expected range.
+The reported X/Y unit tags are both 0 (None). They do not establish cm or mm.
+At the user request, this project now treats **all three original spacing
+values, including private depth spacing, as cm**. This is an explicit
+assumption, not an automatic or verified DICOM calibration. The startup
+instructions, review panel, result plot and saved results identify it.
+No further diagnostic run is required to use this chosen convention.
 
-Run `diagnose_dicom_units`, select the original DICOM, and save the small
-`dicom_units_report_v3.txt`. Version 3 also includes a separate scan matching the supplied Sonos reader
-(including its six-byte OB skip). The standard scan inspects the flat explicit-little-endian
-header used by the legacy reader, reports metadata field names and handles
-metadata struct arrays/cells. Unsupported layouts are identified explicitly.
-It includes only whitelisted geometry/unit values
-and the raw spacing used by the legacy reader; no patient identifiers, dates,
-paths or image pixels are exported. Ultrasound region unit code 3 denotes cm
-for the corresponding axis, but the depth spacing comes from a private tag
-and must be verified separately. No automatic unit inference has been added.
+`resampleDicom` makes voxel spacing isotropic in the same numerical length
+unit as its input. It changes sampling density, not the physical unit, and
+cannot discover a missing unit. The `wall_thickness` entry point alone
+multiplies the spacing vector by 10 to use mm for distance calculations. It
+does not mutate the input volume or convert it again on subsequent runs.
+For the reported study, the original minimum spacing is 0.06314658179 cm;
+after resampling the existing method gives approximately 0.6314658179 mm
+per voxel in all three directions under this assumption.
 
-A report containing `Fields: {}` has not established the source units. The
-reported raw voxel spacing alone supports a field-of-view plausibility check,
-not a verified calibration. The report prints field of view under both cm and
-mm assumptions to make that distinction explicit.
+Review shows both mm and cm; curves remain in mm; the CSV has both columns.
+For identical points, measurements previously made using the mm option are
+multiplied by 10 under the cm assumption. Automatic boundary selection may
+also change because thickness search limits are specified in mm. No result
+is clipped to the expected physiological range. Check the detected boundaries
+before interpreting a large or small thickness.
 
-The uploaded study exceeded the 32 MiB attachment-transfer limit, so its actual
-metadata and images have not been inspected in the cloud. The UI improvements
-are independent of this unresolved calibration. Do not treat current absolute
-thickness measurements as validated until calibration and boundaries are checked.
+The original LV volume workflow continues to use its existing cm convention.
+No ED/ES or volume linkage is added to the wall measurement workflow.
+`diagnose_dicom_units` remains available for future metadata investigation,
+but is not a prerequisite to using the explicit cm assumption.
