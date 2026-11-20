@@ -1,23 +1,23 @@
 function wall_thickness(ds)
-% WALL_THICKNESS 心肌壁厚研究工具：局部线测量 / 三维内外表面距离。
+% WALL_THICKNESS 六位置局部壁厚研究工具（无需容积测量）。
 % wall_thickness                 选择 DICOM 并重采样
 % wall_thickness(heart1)         使用已读取的体数据，避免再次重采样
 % MATLAB R2022a+; Image Processing Toolbox required.
 % Run help wall_thickness, or use the Chinese instructions shown on startup.
 
 instructions = {
-    '心肌壁厚研究工具（真实影像精度尚未验证）';
-    '版本 A：局部壁厚。选择长轴切片，画从心腔穿过心肌到外部的线。';
-    '程序按亮度梯度寻找两侧边界，并作二维平移匹配辅助定位；每帧需审查。';
-    '测量线应接近心肌壁法线。固定切片无法保证追踪同一三维组织。';
-    '版本 B：三维壁厚估计。在多个深度切片勾画内外轮廓，自动调整三维分割。';
-    '结果为内表面到外表面的最短距离；不等同于法线壁厚或标准心肌节段测量。';
-    '须检查整个分割；瓣口附近和截断面的距离不可靠，程序排除两端切片。';
-    '两个版本均需选择帧范围和核对长度单位；无帧时间时横轴仅显示帧号。';
-    '关闭选择窗口或点取消会停止；已经确认的数据会保留，可另存 CSV 和 MAT。';
-    '版本 A 保存边界坐标；版本 B 保存三维掩膜和距离图，便于复核。'};
-uiwait(helpdlg(instructions, '如何使用：两个版本说明'));
-if exist('imresize3', 'file') == 0 || exist('activecontour', 'file') == 0
+    '六位置局部壁厚：左上、左中、左下、右上、右中、右下。';
+    '名称指画面位置，不自动对应解剖壁名或标准心肌节段。';
+    '在同一长轴切片第一帧依次画六条线，从心腔穿过心肌到外部。';
+    '程序按亮度梯度寻找两侧边界，并分别追踪六条线；逐帧逐位置审查。';
+    '测量线应接近当地心肌壁法线；固定切片不能保证同一三维组织。';
+    '可单独修正或跳过一个位置；跳过不影响其他五个位置。';
+    '选择帧范围和核对长度单位；无帧时间时横轴使用帧号。';
+    '不需要测容积。当前不使用 ED/ES、EF 或容积结果。';
+    '停止保留已确认结果；输出六条曲线，CSV 和 MAT。';
+    '运行 demo_wall_thickness 可查看模拟数据结果布局。'};
+uiwait(helpdlg(instructions, '如何使用：六位置局部壁厚'));
+if exist('imresize3', 'file') == 0
     error('wall:Toolbox', '需要 Image Processing Toolbox。');
 end
 if nargin == 0
@@ -53,28 +53,15 @@ if ~isempty(strtrim(settings{3}))
     dt = str2double(settings{3}) / 1000;
     assert(isfinite(dt) && dt > 0, 'wall:Time', '帧间隔必须为正数或留空。');
 end
-mode = questdlg('请选择本次测量方式：', '壁厚测量版本', ...
-    'A 局部壁厚', 'B 三维壁厚', '取消', 'A 局部壁厚');
-if strcmp(mode, 'A 局部壁厚')
-    result = wall.local(ds, spacing, first:last);
-elseif strcmp(mode, 'B 三维壁厚')
-    result = wall.global3d(ds, spacing, first:last);
-else
-    return;
-end
+result = wall.local(ds, spacing, first:last);
 if isempty(result), return; end
 result.spacing_mm = spacing;
 result.frame_interval_s = dt;
 result.source_dimensions = dims;
 if isfinite(dt)
     result.table.Time_s = (result.table.Frame - first) * dt;
-    x = result.table.Time_s; xlabelText = 'Time from selected first frame (s)';
-else
-    x = result.table.Frame; xlabelText = 'Frame';
 end
-figure('Name', ['Wall thickness: ' result.method], 'NumberTitle', 'off');
-plot(x, result.table.Thickness_mm, '-o'); grid on;
-xlabel(xlabelText); ylabel('Thickness estimate (mm)'); title(result.method, 'Interpreter','none');
+wall.plotResults(result);
 disp(result.table);
 choice = questdlg('保存结果 CSV 和可复核的 MAT 数据？', '保存结果', '保存', '取消', '保存');
 if strcmp(choice, '保存')

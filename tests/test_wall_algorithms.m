@@ -29,26 +29,25 @@ verifyEqual(testCase,moved,line+[3 2]);
 verifyGreaterThan(testCase,score,.99);
 end
 
-function testConcentricShell(testCase)
-[x,y,z]=ndgrid(-25:25); r=sqrt(x.^2+y.^2+z.^2);
-inner=r<=12; outer=r<=18;
-[map,values,valid]=wall.surfaceDistance(inner,outer,.5,2);
-verifyTrue(testCase,all(isnan(map(~valid))));
-verifyEqual(testCase,median(values),3,'AbsTol',1);
-verifyTrue(testCase,all(values>0));
+function testSixSiteRowsKeepMissingValues(testCase)
+values=reshape(1:18,3,6); values(2,4)=nan;
+statuses=repmat({'reviewed_auto'},3,6); statuses{2,4}='skipped';
+names={'LU','LM','LL','RU','RM','RL'};
+t=wall.sixResults([7 8 9],values,statuses,names);
+verifyEqual(testCase,height(t),18);
+verifyEqual(testCase,t.Frame,repelem([7;8;9],6));
+verifyEqual(testCase,t.SiteID,repmat((1:6)',3,1));
+for k=1:6
+    verifyEqual(testCase,t.Thickness_mm(t.SiteID==k),values(:,k));
+end
+verifyEqual(testCase,t.Status{10},'skipped');
+verifyEqual(testCase,t.Site{10},'RU');
 end
 
-function testCrossingMasksRejected(testCase)
-inner=false(10,10,10); outer=inner;
-inner(3:8,3:8,3:8)=true; outer(4:7,4:7,4:7)=true;
-verifyError(testCase,@() wall.surfaceDistance(inner,outer,1,2),'wall:Nesting');
-end
-
-function testEndCapsExcluded(testCase)
-inner=false(30,30,20); outer=inner;
-inner(10:20,10:20,3:18)=true; outer(5:25,5:25,3:18)=true;
-[~,values,valid]=wall.surfaceDistance(inner,outer,1,2);
-verifyFalse(testCase,any(reshape(valid(:,:,1:4),[],1)));
-verifyFalse(testCase,any(reshape(valid(:,:,17:20),[],1)));
-verifyGreaterThan(testCase,min(values),0);
+function testPartialFrameKeepsUnmeasuredSites(testCase)
+t=wall.sixResults(5,[8 nan nan nan nan nan], ...
+    {'reviewed_auto','not_measured','not_measured','not_measured','not_measured','not_measured'}, ...
+    {'LU','LM','LL','RU','RM','RL'});
+verifyEqual(testCase,height(t),6);
+verifyTrue(testCase,all(isnan(t.Thickness_mm(2:end))));
 end
