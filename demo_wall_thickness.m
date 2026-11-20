@@ -4,7 +4,7 @@ function result = demo_wall_thickness
 [x,y]=meshgrid(1:240,1:280);
 r=sqrt(((x-120)/65).^2+((y-140)/110).^2);
 img=.12+.65*exp(-((r-1)/.10).^2);
-names={'左上','左中','左下','右上','右中','右下'};
+names={'Left Upper','Left Middle','Left Lower','Right Upper','Right Middle','Right Lower'};
 initial=cell(1,6); rows=[70 140 210];
 for side=1:2
     signX=2*side-3;

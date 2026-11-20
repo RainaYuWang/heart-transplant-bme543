@@ -1,6 +1,6 @@
 function fig = plotResults(result)
 % Display initial locations and six separate curves; NaNs remain gaps.
-fig=figure('Name','六位置壁厚结果','NumberTitle','off','Position',[80 80 1200 600]);
+fig=figure('Name','Six-site wall thickness results','NumberTitle','off','Position',[80 80 1200 600]);
 layout=tiledlayout(fig,1,2,'TileSpacing','compact');
 ax=nexttile(layout); imagesc(ax,result.initial_image); axis(ax,'image');
 colormap(ax,gray); hold(ax,'on');
@@ -10,7 +10,7 @@ for k=1:6
     text(ax,xy(2,1),xy(2,2),sprintf(' %d %s',k,result.site_names{k}), ...
         'Color',result.site_colors(k,:),'BackgroundColor','k');
 end
-title(ax,'第一帧：六个位置示意（按画面命名）');
+title(ax,'First frame: six sites (screen positions)');
 xlabel(ax,'Image column (pixel)'); ylabel(ax,'Image row (pixel)');
 curveAx=nexttile(layout); hold(curveAx,'on');
 for k=1:6
@@ -24,8 +24,8 @@ for k=1:6
         'DisplayName',result.site_names{k},'LineWidth',1.4,'MarkerSize',4);
 end
 grid(curveAx,'on'); xlabel(curveAx,label); ylabel(curveAx,'Thickness (mm)');
-legend(curveAx,'Location','best'); title(curveAx,'六个位置的壁厚变化（缺失值断开）');
+legend(curveAx,'Location','best'); title(curveAx,'Six-site thickness over time (gaps = missing data)');
 if isfield(result,'is_demo') && result.is_demo
-    title(layout,'模拟数据示意 / SYNTHETIC DEMO — 非真实测量');
+    title(layout,'SYNTHETIC DEMO - Not real measurements');
 end
 end

@@ -1,55 +1,80 @@
-# 六位置局部壁厚（保留 A，删除 B）
+# Six-site local wall thickness
 
-需要 MATLAB R2022a+ 和 Image Processing Toolbox。保持 `+wall` 文件夹名称及位置。
-建议解压到一个新文件夹，以免与旧版同名文件混用。原 LV volume 功能仍保留，
-壁厚测量不依赖它，不导入 ED/ES，也不计算增厚率。
+Requires MATLAB R2022a or newer and Image Processing Toolbox. Keep the `+wall`
+folder beside `wall_thickness.m`. Extract into a new folder to avoid mixing
+versions. The existing LV volume workflow remains available, but thickness
+measurement does not require it and does not use ED/ES or calculate thickening
+fractions. The former 3D workflow has been removed.
 
-## 先看结果布局
+## Preview the layout
 
-运行 `demo_wall_thickness`。它使用模拟图像和模拟曲线调用正式结果显示函数，
-不需要 DICOM。左侧是六位置标记，右侧是六条曲线；示例中一个缺失点显示为断线。
-该演示不是实测或精度验证。
+Run `demo_wall_thickness`. It calls the actual result display function using
+synthetic images and curves; no DICOM is needed. The left panel shows six site
+markers; the right shows six curves. One missing example measurement creates
+a gap. This is a layout demonstration, not a measurement or accuracy test.
 
-![模拟数据结果布局（非 MATLAB 截图）](docs/six_site_preview.png)
+![Synthetic result layout (not a MATLAB screenshot)](docs/six_site_preview.png)
 
-## 真实测量
+## Measure real data
 
-1. 运行 `wall_thickness` 选择一份 DICOM，或运行 `wall_thickness(heart1)` 使用已读取数据。
-   也可点击原查看器中的“六位置壁厚（说明）”。
-2. 核对原始长度单位 cm/mm，输入起止帧。有可靠的恒定帧间隔时填毫秒值，否则留空。
-3. 输入长轴切片编号（与原查看器 Slice 相同）、厚度搜索范围和平移搜索半径。
-   默认 1–25 mm 是搜索设置，不是生理正常参考值。
-4. 在第一帧同一张图上依次画左上、左中、左下、右上、右中、右下六条线。
-   每条线从心腔内穿过该处心肌到外部，尽量垂直当地心肌壁，双击完成。
-   这些是画面位置名称，不自动代表解剖壁名或标准心肌节段。
-5. 程序按帧逐一审查六个位置。彩色实线是当前检测边界，虚线是搜索线；
-   灰色线是其他位置的参考，可能来自上一帧或本帧已确认结果。
-   右侧显示当前搜索线上的亮度曲线。确认后进入下一个位置，六处完成后进入下一帧。
-6. “修正/重画”可重画搜索线或直接画内壁至外壁的测量线。
-   “跳过”只跳过当前帧当前部位，不影响其他五处；该位置下一帧重新定位。
-   “停止”或关窗保留已确认结果，当前帧未完成的位置记为 `not_measured`。
-7. 最终左图固定显示第一帧六处初始位置，右图用对应颜色绘制六条曲线。
-   横轴为帧号，或从选定起始帧算起的秒数；纵轴统一 mm。缺失点不插值。
+1. Run `wall_thickness` to select a DICOM, or `wall_thickness(heart1)` to use
+   loaded data. Alternatively, click **Wall thickness (6 sites)** in the viewer.
+2. Verify the original length units (cm or mm) and select the first and last
+   frame. Enter a frame interval in milliseconds only if it is known and
+   constant; otherwise leave it blank.
+3. Enter the long-axis slice number (the original viewer's Slice), thickness
+   search range and translation search radius. The default 1-25 mm range is
+   a search setting, not a physiological reference range.
+4. On the first frame of the same slice, draw six lines in this order:
+   **Left Upper, Left Middle, Left Lower, Right Upper, Right Middle, Right Lower**.
+   Draw each line from inside the cavity through the wall to the outside,
+   approximately perpendicular to the local wall. Double-click to finish.
+   These labels describe screen positions, not anatomical wall names or
+   standard myocardial segments.
+5. Review all six sites in each frame. Colored solid lines show detected
+   boundaries; dashed lines show the search line. Gray lines are other site
+   references, which may come from the previous frame or accepted measurements
+   in the current frame. The right panel shows brightness along the current
+   line. Accepting advances to the next site, then to the next frame after
+   all six sites have been reviewed.
+6. **Correct / Redraw** lets you redraw the search line or manually draw the
+   inner-to-outer boundary segment. **Skip** affects only this site in this
+   frame; the other sites continue, and this site must be reselected in the
+   next frame. **Stop** or closing the window retains accepted results;
+   unfinished sites in the current frame are marked `not_measured`.
+7. The final left panel shows the initial six locations on the first frame.
+   The right panel shows six curves with matching colors. The x-axis is frame
+   number, or seconds from the selected first frame if timing was provided.
+   Thickness is in mm. Missing measurements are not interpolated.
 
-## 保存
+## Save results
 
-CSV 每行是一个“帧 + 位置”：Frame、SiteID（1–6）、Site、Thickness_mm、Status，
-以及可选 Time_s。跳过为 `skipped`，自动检测经确认是 `reviewed_auto`，
-修正后为 `reviewed_corrected`。缺失值为 NaN，不会记成零。
-MAT 另外保留第一帧图像和初始线、逐帧逐位置边界/搜索线、单位和参数。
+Each CSV row represents one frame and one site: `Frame`, `SiteID` (1-6),
+`Site`, `Thickness_mm`, `Status`, and optional `Time_s`. Status is `skipped`,
+`reviewed_auto`, `reviewed_corrected`, or `not_measured`. Missing values are
+NaN, not zero. Site names are exported in English.
 
-## 局限与验证
+The MAT file also stores the first-frame image and initial lines, per-frame
+and per-site boundary/search-line coordinates, units and settings.
 
-算法依然是亮度梯度边界检测及二维局部平移匹配，不保证始终追踪同一块三维组织。
-旋转、组织移出切片、阴影或乳头肌会影响结果，需人工确认；倾斜的线会高估壁厚。
-六条线各自跟踪，算法不自动保证它们一直保持上下顺序，应在检查时留意。
-云端没有 MATLAB，因此数值测试及实际交互尚未执行。
-在 MATLAB 中运行：
+## Limitations and validation
+
+The algorithm uses brightness-gradient detection and local 2D translation
+matching. It cannot guarantee tracking the same 3D tissue. Rotation,
+out-of-plane motion, shadows and papillary muscles can affect results;
+review is required. Oblique measurement lines can overestimate thickness.
+The six lines track independently: check that they retain their intended
+upper/middle/lower positions.
+
+MATLAB is unavailable in the cloud environment. Numerical tests and actual
+GUI interaction have not been executed there. Run locally:
 
 ```matlab
 results = runtests('tests/test_wall_algorithms.m');
 assertSuccess(results)
 ```
 
-另请检查：第一帧六条线、第二帧分别跟踪、单位置修正、单位置跳过、
-中途停止后的缺失值、六条曲线及 CSV 位置对应关系。使用少量帧试验后再测完整周期。
+Also check initialization of all six lines, independent tracking in the
+second frame, correcting/skipping one site, missing values after stopping
+partway through a frame, and the correspondence between curves and CSV site
+labels. Try a few frames before measuring a complete cycle.

@@ -1,16 +1,16 @@
 # heart-transplant-bme543
 
-## Six-site local wall thickness / 六位置局部壁厚
+## Six-site local wall thickness
 
 Run `wall_thickness` to select one DICOM, or `wall_thickness(heart1)` with
-already loaded data. The viewer also has a **六位置壁厚（说明）** button.
+already loaded data. The viewer also has a **Wall thickness (6 sites)** button.
 On one long-axis slice, draw six lines: screen left upper/middle/lower and
 screen right upper/middle/lower. Each site is tracked and reviewed separately.
 The result shows six color-matched curves; missing measurements stay missing.
 No volume measurement or ED/ES linkage is required or used. The 3D workflow
 has been removed. Download the whole repository, including `+wall`.
 Run `demo_wall_thickness` to preview the actual MATLAB result layout with
-synthetic data, without DICOM. See [中文操作说明](WALL_THICKNESS_GUIDE.md).
+synthetic data, without DICOM. See [User guide](WALL_THICKNESS_GUIDE.md).
 Real-image accuracy and MATLAB GUI behavior still require local validation.
 
 ## MATLAB workflow
