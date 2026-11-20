@@ -14,7 +14,7 @@ names={'Left Upper','Left Middle','Left Lower','Right Upper','Right Middle','Rig
 colors=lines(6);
 initialImage=double(squeeze(ds.data(:,slice,:,frames(1))).');
 assert(all(isfinite(initialImage(:))), 'wall:Data','The image contains NaN or Inf values.');
-fig=figure('Name','First frame: draw six search lines','NumberTitle','off');
+fig=figure('Name','First frame: draw six search lines','NumberTitle','off','WindowState','maximized');
 cleanup=onCleanup(@() closeIfValid(fig));
 ax=axes(fig); imagesc(ax,initialImage); axis(ax,'image'); colormap(ax,gray); hold(ax,'on');
 initialLines=cell(1,6);
@@ -35,19 +35,16 @@ previous=[]; previousLines=initialLines;
 values=nan(numel(frames),6);
 statuses=repmat({'not_measured'},numel(frames),6);
 records=cell(numel(frames),6);
-lastVisited=0; stop=false;
+lastVisited=0;
 for idx=1:numel(frames)
     f=frames(idx); lastVisited=idx;
     img=double(squeeze(ds.data(:,slice,:,f)).');
     assert(all(isfinite(img(:))), 'wall:Data','The image contains NaN or Inf values.');
-    for site=1:6
-        [value,outcome,record,nextLine]=measureSite(img,previous,previousLines{site}, ...
-            previousLines,site,names{site},colors(site,:),f,slice,spacing,limits,radius);
-        if strcmp(outcome,'stop'), stop=true; break; end
-        values(idx,site)=value; statuses{idx,site}=outcome; records{idx,site}=record;
-        previousLines{site}=nextLine;
-    end
-    if stop, break; end
+    [frameValues,frameStatuses,frameRecords,nextLines,accepted]=wall.reviewFrame( ...
+        img,previous,previousLines,names,colors,f,slice,spacing,limits,radius);
+    if ~accepted, break; end
+    values(idx,:)=frameValues; statuses(idx,:)=frameStatuses;
+    records(idx,:)=frameRecords; previousLines=nextLines;
     previous=img;
 end
 if ~any(~strcmp(statuses(:),'not_measured')), return; end
@@ -56,108 +53,6 @@ result.table=wall.sixResults(frames(1:lastVisited),values(1:lastVisited,:),statu
 result.site_names=names; result.site_colors=colors;
 result.initial_image=initialImage; result.initial_lines=initialLines;
 result.settings=struct('slice',slice,'limits_mm',limits,'search_radius_pixels',radius);
-end
-
-function [thickness,outcome,record,nextLine]=measureSite(img,previous,previousLine,references,site,name,color,f,slice,spacing,limits,radius)
-thickness=nan; outcome='stop'; record=[]; nextLine=[];
-fig=figure('Name',sprintf('Six-site thickness | %s | Frame %d',name,f),'NumberTitle','off');
-cleanup=onCleanup(@() closeIfValid(fig));
-ax=subplot(1,2,1,'Parent',fig); imagesc(ax,img); axis(ax,'image'); colormap(ax,gray); hold(ax,'on');
-profileAx=subplot(1,2,2,'Parent',fig);
-    corrected=false; trackingScore=nan;
-    if isempty(previousLine)
-        lineXY=selectLine(ax);
-    elseif isempty(previous)
-        lineXY=previousLine;
-    else
-        [lineXY,trackingScore]=wall.trackLine(previous,img,previousLine,radius);
-    end
-    if isempty(lineXY), return; end
-    stop=false;
-    while isgraphics(fig)
-        cla(ax); imagesc(ax,img); axis(ax,'image'); hold(ax,'on');
-        drawReferences(ax, references, site);
-        plot(ax,lineXY(:,1),lineXY(:,2),'--','Color',color);
-        [points,strength,p]=wall.profileEdges(img,lineXY,spacing([1 3]),limits);
-        cla(profileAx); plot(profileAx,p.distance,p.intensity); grid(profileAx,'on');
-        xlabel(profileAx,'Distance along line (mm)'); ylabel(profileAx,'Brightness');
-        if all(isfinite(points(:)))
-            plot(ax,points(:,1),points(:,2),'-o','Color',color,'LineWidth',2);
-            thickness=norm(diff(points,1,1).*spacing([1 3]));
-            edgeDist=sqrt(sum(((points-lineXY(1,:)).*spacing([1 3])).^2,2));
-            xline(profileAx,edgeDist(1),'c--'); xline(profileAx,edgeDist(2),'c--');
-        else
-            thickness=nan;
-        end
-        title(ax,sprintf('%s | Frame %d | %.2f mm | Match %.2f\nSolid: boundaries; dashed: search line',name,f,thickness,trackingScore));
-        action=questdlg('Check both boundaries. If no valid boundaries are detected, correct or skip this site.', ...
-            'Review measurement','Accept','Correct / Redraw','Skip / Stop','Correct / Redraw');
-        if isempty(action), stop=true; break; end
-        if strcmp(action,'Correct / Redraw')
-            method=questdlg('Reposition the search line or manually mark the inner and outer boundaries?', ...
-                'Correction method','Redraw search line','Manual boundaries','Cancel','Redraw search line');
-            if strcmp(method,'Redraw search line')
-                lineXY=selectLine(ax); corrected=true;
-                if isempty(lineXY), stop=true; break; end
-                continue;
-            elseif strcmp(method,'Manual boundaries')
-                title(ax,'Draw from the inner to the outer boundary; double-click to finish');
-                roi=drawline(ax,'Color','m');
-                try
-                    wait(roi);
-                catch err
-                    if ~isgraphics(fig), stop=true; break; end
-                    rethrow(err);
-                end
-                if ~isvalid(roi) || ~isgraphics(fig), stop=true; break; end
-                points=roi.Position;
-                if any(points(:,1)<1 | points(:,1)>size(img,2) | points(:,2)<1 | points(:,2)>size(img,1))
-                    uiwait(errordlg('Endpoints must be inside the image.')); continue;
-                end
-                thickness=norm(diff(points,1,1).*spacing([1 3]));
-                if ~isfinite(thickness) || thickness<=0, continue; end
-                confirm=questdlg(sprintf('Accept manual thickness of %.2f mm?',thickness),'Manual measurement','Accept','Retry','Retry');
-                if ~strcmp(confirm,'Accept'), continue; end
-                corrected=true;
-                % Extend manually corrected segment for the next edge search.
-                delta=diff(points,1,1);
-                lineXY=[points(1,:)-0.5*delta; points(2,:)+0.5*delta];
-                lineXY(:,1)=max(1,min(size(img,2),lineXY(:,1)));
-                lineXY(:,2)=max(1,min(size(img,1),lineXY(:,2)));
-            else
-                continue;
-            end
-        elseif strcmp(action,'Skip / Stop')
-            choice=questdlg('Skip only this site in this frame. Other sites continue; reselect this site in the next frame.', ...
-                'Skip or stop','Skip','Stop','Stop');
-            if ~strcmp(choice,'Skip'), stop=true; break; end
-            thickness=nan; points=nan(2,2); previousLine=[];
-        elseif ~isfinite(thickness)
-            uiwait(errordlg('No valid bright wall band detected. Please correct or skip this site.')); continue;
-        end
-        if isfinite(thickness)
-            previous=img; previousLine=lineXY;
-            if corrected, status='reviewed_corrected'; else, status='reviewed_auto'; end
-        else
-            status='skipped';
-        end
-        record=struct('frame',f,'site',site,'slice',slice,'points_pixel',points, ...
-            'search_line_pixel',lineXY,'tracking_correlation',trackingScore,'edge_strength',strength);
-        outcome=status;
-        nextLine=previousLine;
-        return;
-    end
-end
-
-function drawReferences(ax,references,site)
-names={'Left Upper','Left Middle','Left Lower','Right Upper','Right Middle','Right Lower'};
-for k=1:6
-    if k==site || isempty(references{k}), continue; end
-    xy=references{k};
-    plot(ax,xy(:,1),xy(:,2),':','Color',[.55 .55 .55],'HitTest','off');
-    text(ax,xy(2,1),xy(2,2),names{k},'Color',[.7 .7 .7], ...
-        'BackgroundColor','k','HitTest','off');
-end
 end
 
 function xy=selectLine(ax,prompt,color)

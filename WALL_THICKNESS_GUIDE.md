@@ -31,17 +31,17 @@ a gap. This is a layout demonstration, not a measurement or accuracy test.
    approximately perpendicular to the local wall. Double-click to finish.
    These labels describe screen positions, not anatomical wall names or
    standard myocardial segments.
-5. Review all six sites in each frame. Colored solid lines show detected
-   boundaries; dashed lines show the search line. Gray lines are other site
-   references, which may come from the previous frame or accepted measurements
-   in the current frame. The right panel shows brightness along the current
-   line. Accepting advances to the next site, then to the next frame after
-   all six sites have been reviewed.
-6. **Correct / Redraw** lets you redraw the search line or manually draw the
-   inner-to-outer boundary segment. **Skip** affects only this site in this
-   frame; the other sites continue, and this site must be reselected in the
-   next frame. **Stop** or closing the window retains accepted results;
-   unfinished sites in the current frame are marked `not_measured`.
+5. All six candidate boundary segments appear together in a maximized window.
+   Drag any colored segment or its endpoints to correct it. The sidebar lists
+   thickness in both mm and cm, and the selected-site brightness profile.
+   Use the site selector for **Redraw search line**, **Draw manual boundaries**,
+   or **Skip selected site**. There are no per-site confirmation dialogs.
+6. Click **Accept frame / Next** once after reviewing all six sites. Any site
+   with no valid boundaries must be drawn or explicitly skipped first. Skipping
+   affects only that site. In the next frame, a skipped site needs a new search
+   line or manual boundaries. **Stop (keep earlier frames)** or closing the
+   window retains earlier accepted frames; unaccepted current-frame edits are
+   discarded and shown as `not_measured` if earlier results exist.
 7. The final left panel shows the initial six locations on the first frame.
    The right panel shows six curves with matching colors. The x-axis is frame
    number, or seconds from the selected first frame if timing was provided.
@@ -50,12 +50,12 @@ a gap. This is a layout demonstration, not a measurement or accuracy test.
 ## Save results
 
 Each CSV row represents one frame and one site: `Frame`, `SiteID` (1-6),
-`Site`, `Thickness_mm`, `Status`, and optional `Time_s`. Status is `skipped`,
+`Site`, `Thickness_mm`, `Thickness_cm`, `Status`, and optional `Time_s`. Status is `skipped`,
 `reviewed_auto`, `reviewed_corrected`, or `not_measured`. Missing values are
 NaN, not zero. Site names are exported in English.
 
 The MAT file also stores the first-frame image and initial lines, per-frame
-and per-site boundary/search-line coordinates, units and settings.
+and per-site boundary/search-line coordinates, units and settings, including the declared source unit and its unverified calibration status.
 
 ## Limitations and validation
 
@@ -78,3 +78,22 @@ Also check initialization of all six lines, independent tracking in the
 second frame, correcting/skipping one site, missing values after stopping
 partway through a frame, and the correspondence between curves and CSV site
 labels. Try a few frames before measuring a complete cycle.
+
+## Verify units before interpreting values
+
+The unit selection describes the original spacing unit, not the display unit.
+Choosing cm multiplies the stored spacing by 10 for mm output; choosing mm does
+not. For identical points, a 1-4 mm result would become 10-40 mm if cm were
+selected. This is not a way to calibrate against an expected range.
+
+Run `diagnose_dicom_units`, select the original DICOM, and save the small
+`dicom_units_report.txt`. It includes only whitelisted geometry/unit fields
+and the raw spacing used by the legacy reader; no patient identifiers, dates,
+paths or image pixels are exported. Ultrasound region unit code 3 denotes cm
+for the corresponding axis, but the depth spacing comes from a private tag
+and must be verified separately. No automatic unit inference has been added.
+
+The uploaded study exceeded the 32 MiB attachment-transfer limit, so its actual
+metadata and images have not been inspected in the cloud. The UI improvements
+are independent of this unresolved calibration. Do not treat current absolute
+thickness measurements as validated until calibration and boundaries are checked.

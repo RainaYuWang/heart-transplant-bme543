@@ -3,18 +3,19 @@ function wall_thickness(ds)
 % wall_thickness                 Select a DICOM and resample it
 % wall_thickness(heart1)         Use an already loaded volume without resampling again
 % MATLAB R2022a+; Image Processing Toolbox required.
-% Run help wall_thickness, or use the Chinese instructions shown on startup.
+% Run help wall_thickness, or use the English instructions shown on startup.
 
 instructions = {
     'Six sites: Left Upper, Left Middle, Left Lower, Right Upper, Right Middle, Right Lower.';
     'Labels describe screen positions, not anatomical wall names or standard myocardial segments.';
     'On the first frame of one long-axis slice, draw six lines from the cavity through the wall to the outside.';
-    'Brightness gradients locate both boundaries. Each line is tracked independently; review every site in every frame.';
+    'Review all six sites in one maximized window. Drag endpoints and click Accept frame / Next once per frame.';
     'Draw approximately perpendicular to the local wall. A fixed slice cannot guarantee tracking the same 3D tissue.';
     'Correct or skip individual sites without affecting the other five sites.';
     'Select the frame range and verify length units. Without frame timing, the x-axis shows frame numbers.';
     'Volume measurement is not required. ED/ES, EF and volume results are not used.';
-    'Stopping retains accepted results. Output includes six curves, CSV and MAT files.';
+    'Stopping retains earlier accepted frames. Unaccepted changes in the current frame are discarded.';
+    'Use diagnose_dicom_units to inspect calibration. Never select units to force an expected thickness range.';
     'Run demo_wall_thickness to preview the result layout with synthetic data.'};
 uiwait(helpdlg(instructions, 'How to use: six-site local wall thickness'));
 if exist('imresize3', 'file') == 0
@@ -36,7 +37,11 @@ assert(numel(dims) == 4 && all(isfinite(dims)) && all(dims == fix(dims)) && ...
     'wall:Dimensions', 'Invalid volume dimensions. Check that you are using the corrected resampleDicom.');
 spacing = [ds.widthspan ds.heightspan ds.depthspan] ./ dims(1:3);
 assert(all(isfinite(spacing) & spacing > 0), 'wall:Spacing', 'Voxel spacing must be finite and positive.');
-unit = questdlg('Verify the original DICOM length units (not detected automatically):', ...
+rawSpacing=spacing;
+unit = questdlg({'Original spacing units must be verified from the source, not from expected thickness.', ...
+    sprintf('Stored spacing: %.6g, %.6g, %.6g per voxel.',spacing), ...
+    'cm multiplies ALL values by 10 to report mm; mm leaves values unchanged.', ...
+    'If unknown, Cancel and run diagnose_dicom_units.'}, ...
     'Confirm units', 'cm', 'mm', 'Cancel', 'Cancel');
 if strcmp(unit, 'cm'), spacing = spacing * 10;
 elseif ~strcmp(unit, 'mm'), return;
@@ -56,6 +61,10 @@ end
 result = wall.local(ds, spacing, first:last);
 if isempty(result), return; end
 result.spacing_mm = spacing;
+result.raw_spacing = rawSpacing;
+result.declared_source_unit = unit;
+result.calibration_status = 'user_declared_not_automatically_verified';
+result.table.Thickness_cm = result.table.Thickness_mm / 10;
 result.frame_interval_s = dt;
 result.source_dimensions = dims;
 if isfinite(dt)

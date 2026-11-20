@@ -5,13 +5,15 @@
 Run `wall_thickness` to select one DICOM, or `wall_thickness(heart1)` with
 already loaded data. The viewer also has a **Wall thickness (6 sites)** button.
 On one long-axis slice, draw six lines: screen left upper/middle/lower and
-screen right upper/middle/lower. Each site is tracked and reviewed separately.
+screen right upper/middle/lower. Each site is tracked independently and reviewed together in one maximized window.
+Drag boundary endpoints and accept all six sites once per frame.
 The result shows six color-matched curves; missing measurements stay missing.
 No volume measurement or ED/ES linkage is required or used. The 3D workflow
 has been removed. Download the whole repository, including `+wall`.
 Run `demo_wall_thickness` to preview the actual MATLAB result layout with
 synthetic data, without DICOM. See [User guide](WALL_THICKNESS_GUIDE.md).
-Real-image accuracy and MATLAB GUI behavior still require local validation.
+Run `diagnose_dicom_units` to export a small geometry-only unit report.
+Real-image accuracy, unit calibration and MATLAB GUI behavior still require local validation.
 
 ## MATLAB workflow
 
