@@ -112,6 +112,8 @@ function heartViewer(hearts, names)
     % play button
     uicontrol(fig, 'Style', 'pushbutton', 'String', 'Wall thickness (6 sites)', 'Units', 'normalized', ...
         'Position', [0.81 0.21 0.18 0.06], 'Callback', @(~,~) startWallThickness(fig));
+    uicontrol(fig, 'Style', 'pushbutton', 'String', 'Wall thickness (contours)', 'Units', 'normalized', ...
+        'Position', [0.81 0.045 0.18 0.06], 'Callback', @(~,~) startContourThickness(fig));
     S.playBtn = uicontrol(fig, 'Style', 'togglebutton', 'String', 'Play', 'Units', 'normalized', ...
         'Position', [0.82 0.12 0.15 0.05], 'Callback', @(~,~) playFrames(fig));
 
@@ -124,6 +126,12 @@ function startWallThickness(fig)
     S = guidata(fig);
     S.playBtn.Value = 0; S.playBtn.String = 'Play';
     wall_thickness(S.hearts{S.k});
+end
+
+function startContourThickness(fig)
+    S = guidata(fig);
+    S.playBtn.Value = 0; S.playBtn.String = 'Play';
+    wall_contours(S.hearts{S.k});
 end
 
 function typedValue(fig, which)

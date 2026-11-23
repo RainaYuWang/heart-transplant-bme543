@@ -1,5 +1,20 @@
 # heart-transplant-bme543
 
+## Contour-based regional mean wall thickness
+
+Run `result = wall_contours` to select a DICOM, or
+`result = wall_contours(heart1)` with loaded data. The viewer also provides
+**Wall thickness (contours)**. Select an inclusive frame range and a fixed
+plane, then draw the inner and outer myocardial contours on each frame.
+Faint outlines show the last accepted frame; optionally copy and edit them.
+Uniform physical arc-length samples on the inner contour are measured to
+the closest outer contour segments. Choose a whole-ring mean or a fixed
+angular region; the result plots its mean thickness per frame.
+Run `demo_wall_contours` for a synthetic preview. See the
+[contour workflow guide](CONTOUR_THICKNESS_GUIDE.md) for usage, the exact
+distance definition, exports and limitations. This is manual 2D analysis;
+the former automatic 3D workflow has not been restored.
+
 ## Six-site local wall thickness
 
 Run `wall_thickness` to select one DICOM, or `wall_thickness(heart1)` with
