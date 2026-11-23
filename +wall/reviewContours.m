@@ -2,9 +2,20 @@ function [measurement,status] = reviewContours(img,spacing,frame,previous,settin
 % Maximized per-frame manual contours, with immutable previous-frame guides.
 measurement=[]; status='not_measured'; rois=cell(1,2); listeners=cell(1,2);
 names={'Inner contour','Outer contour'}; colors={[0 .9 1],[1 .55 .1]};
-busy=false; overlays=gobjects(0);
-fig=figure('Name',sprintf('Contour wall thickness | Frame %d',frame),'NumberTitle','off', ...
-    'WindowState','maximized','Color',[.12 .12 .12]);
+busy=false; finished=false; overlays=gobjects(0);
+range=settings.frame_range;
+progress=sprintf('Frame %d | %d of %d | Range %d-%d', ...
+    frame,frame-range(1)+1,range(2)-range(1)+1,range(1),range(2));
+if frame==range(2)
+    acceptLabel='Accept last frame / Show results';
+    skipLabel='Skip last frame / Show results';
+else
+    acceptLabel=sprintf('Accept / Next frame %d',frame+1);
+    skipLabel=sprintf('Skip / Next frame %d',frame+1);
+end
+fig=figure('Name',['Contour wall thickness | ' progress],'NumberTitle','off', ...
+    'WindowState','maximized','Color',[.12 .12 .12],'Tag','wallContourReview', ...
+    'CloseRequestFcn',@closeReview);
 cleanup=onCleanup(@() closeIfValid(fig));
 ax=axes(fig,'Position',[.035 .08 .69 .85]);
 imagesc(ax,img,climits); axis(ax,'image'); colormap(ax,gray); hold(ax,'on');
@@ -18,7 +29,7 @@ if ~isempty(previous)
 else
     reference='No previous accepted contours';
 end
-title(ax,{sprintf('Frame %d | %s',frame,settings.region_label),reference},'Color','w','Interpreter','none');
+title(ax,{progress,settings.region_label,reference},'Color','w','Interpreter','none');
 info=uicontrol(fig,'Style','text','Units','normalized','Position',[.75 .72 .23 .23], ...
     'HorizontalAlignment','left','BackgroundColor',[.12 .12 .12],'ForegroundColor','w','FontSize',11, ...
     'String',{'Draw the endocardial (inner) and epicardial (outer) contours.'; ...
@@ -29,12 +40,14 @@ info=uicontrol(fig,'Style','text','Units','normalized','Position',[.75 .72 .23 .
 summary=uicontrol(fig,'Style','text','Units','normalized','Position',[.75 .52 .23 .19], ...
     'HorizontalAlignment','left','BackgroundColor',[.12 .12 .12],'ForegroundColor',[1 .85 .25],'FontSize',12);
 labels={'Draw / replace inner contour','Draw / replace outer contour','Use previous contours as editable copies', ...
-    'Preview thickness','Accept frame / Next','Skip frame','Stop (keep earlier frames)'};
+    'Preview thickness',acceptLabel,skipLabel,'Stop (keep earlier frames)'};
 callbacks={@(~,~) drawContour(1),@(~,~) drawContour(2),@copyPrevious,@preview,@accept,@skip,@stop};
 buttons=gobjects(7,1);
 for j=1:7
     buttons(j)=uicontrol(fig,'Style','pushbutton','String',labels{j},'Units','normalized', ...
-        'Position',[.75 .465-(j-1)*.055 .23 .045],'Callback',callbacks{j});
+        'Position',[.75 .465-(j-1)*.055 .23 .045],'Callback',callbacks{j}, ...
+        'Tag',sprintf('wallContourAction%d',j),'BusyAction','cancel');
+    if j>=4, buttons(j).Interruptible='off'; end
 end
 if isempty(previous), buttons(3).Enable='off'; end
 uicontrol(fig,'Style','text','Units','normalized','Position',[.75 .015 .23 .09], ...
@@ -42,9 +55,17 @@ uicontrol(fig,'Style','text','Units','normalized','Position',[.75 .015 .23 .09],
     'String',sprintf(['Inner arc: %d equally spaced samples.\nShortest distance to outer contour segments.\n' ...
     'Source spacing assumes cm; 10 mm = 1 cm.'],settings.sample_count));
 summary.String='Draw both contours, then preview or accept. The region settings stay fixed across frames.';
-uiwait(fig);
+% A UI resume is not itself a stop decision. ROI/UI activity may resume a wait;
+% stay on this frame until one of our explicit terminal callbacks completes.
+while isgraphics(fig) && ~finished
+    uiwait(fig);
+end
+% Nested callbacks retain the shared workspace. Explicitly destroy this
+% window before the caller opens the next frame, rather than relying on scope exit.
+closeIfValid(fig);
 
     function invalidate(varargin)
+        if finished || ~isgraphics(fig), return; end
         measurement=[];
         delete(overlays(isgraphics(overlays))); overlays=gobjects(0);
         summary.String='Contours changed. Preview or accept to recompute thickness.';
@@ -62,7 +83,7 @@ uiwait(fig);
         listeners{k}=addlistener(rois{k},'ROIMoved',@invalidate);
     end
     function drawContour(k)
-        if busy, return; end
+        if busy || finished, return; end
         setBusy(true); draft=[];
         summary.String=['Draw ' lower(names{k}) ': click vertices; double-click to finish. Esc cancels.'];
         try
@@ -79,7 +100,7 @@ uiwait(fig);
         if isgraphics(fig), setBusy(false); end
     end
     function copyPrevious(varargin)
-        if busy || isempty(previous), return; end
+        if busy || finished || isempty(previous), return; end
         install(1,previous.inner_pixel); install(2,previous.outer_pixel); invalidate();
         summary.String='Copied contours are not tracked. Adjust them to the current image before accepting.';
     end
@@ -122,19 +143,29 @@ uiwait(fig);
         ok=true;
     end
     function preview(varargin)
-        if ~busy, compute(); end
+        if ~busy && ~finished, compute(); end
     end
     function accept(varargin)
-        if ~busy && compute(), status='accepted'; uiresume(fig); end
+        if ~busy && ~finished && compute(), finish('accepted'); end
     end
     function skip(varargin)
-        if ~busy, measurement=[]; status='skipped'; uiresume(fig); end
+        if ~busy && ~finished, measurement=[]; finish('skipped'); end
     end
     function stop(varargin)
-        if ~busy, measurement=[]; status='not_measured'; uiresume(fig); end
+        if ~busy && ~finished, measurement=[]; finish('not_measured'); end
+    end
+    function finish(decision)
+        status=decision; finished=true;
+        set(buttons,'Enable','off');
+        uiresume(fig);
+    end
+    function closeReview(varargin)
+        % Closing during drawing also cancels the draft ROI interaction.
+        if ~finished, measurement=[]; status='not_measured'; finished=true; end
+        delete(fig);
     end
 end
 
 function closeIfValid(fig)
-if isgraphics(fig), close(fig); end
+if isgraphics(fig), delete(fig); end
 end

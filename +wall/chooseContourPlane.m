@@ -12,6 +12,8 @@ uicontrol(fig,'Style','pushbutton','String','Use this plane for all frames','Uni
     'Position',[.73 .08 .23 .07],'Callback',@accept);
 changePlane(); uiwait(fig);
 if chosen, dimension=plane.Value; slice=round(slider.Value); end
+% Release the preview and its nested callbacks before opening frame review.
+closeIfValid(fig);
 
     function changePlane(varargin)
         n=size(ds.data,plane.Value);

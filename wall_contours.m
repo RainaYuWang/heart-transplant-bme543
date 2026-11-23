@@ -62,14 +62,17 @@ end
 if isempty(dimension), return; end
 if sector(2)==360, scope='whole ring'; else, scope=sprintf('sector %.1f + %.1f deg',sector); end
 settings=struct('dimension',dimension,'slice',slice,'sample_count',count, ...
-    'sector_deg',sector,'region_name',region,'region_label',sprintf('%s (%s)',region,scope));
+    'sector_deg',sector,'region_name',region,'region_label',sprintf('%s (%s)',region,scope), ...
+    'frame_range',[first last]);
 frames=(first:last)'; n=numel(frames); records=cell(n,1); status=repmat({'not_measured'},n,1);
 means=nan(n,1); medians=nan(n,1); selectedCount=zeros(n,1); arcStep=nan(n,1);
 [initialImage,planeSpacing]=wall.contourImage(ds,dimension,slice,first,spacing);
 climits=[min(initialImage(:)) max(initialImage(:))];
 if climits(1)==climits(2), climits=climits+[-.5 .5]; end
 previous=[]; firstAcceptedImage=[]; firstAccepted=[];
+fprintf('Contour measurement: frames %d through %d (%d frames).\n',first,last,n);
 for k=1:n
+    fprintf('Reviewing frame %d (%d of %d).\n',frames(k),k,n);
     img=wall.contourImage(ds,dimension,slice,frames(k),spacing);
     [m,state]=wall.reviewContours(img,planeSpacing,frames(k),previous,settings,climits);
     if strcmp(state,'not_measured'), break; end

@@ -52,6 +52,10 @@ and thickness changes are synthetic, not patient measurements.
    The sidebar displays the regional mean in both mm and cm and the sample
    count. Review the boundaries and selected region, then click
    **Accept frame / Next** once. Accept also recomputes after any edits.
+   The window shows the current frame, progress and full selected range.
+   The button identifies the next frame (for example, **Accept / Next frame 2**).
+   On the last frame it changes to **Accept last frame / Show results**.
+   Each completed review window closes before the next frame opens.
 8. On the next frame, faint dotted/dashed contours show the **last accepted
    frame**, whose number is displayed above the image. These are fixed
    positional guides. Draw new contours or click **Use previous contours as
@@ -134,6 +138,7 @@ interactive GUI therefore still need to be run locally:
 
 ```matlab
 assertSuccess(runtests('tests/test_contour_thickness.m'))
+assertSuccess(runtests('tests/test_contour_review_ui.m')) % Desktop GUI regression
 demo_wall_contours
 ```
 
@@ -142,6 +147,9 @@ uniform sampling despite uneven vertices, contour-order invariance, segment
 projection, sector wrap/translation, invalid polygons, image/spacing axis
 mapping and local-distance exports. They do not validate real ultrasound
 boundary identification.
+The desktop regression also checks three consecutive accepted frames,
+ignores a UI resume without an explicit decision, and checks that old review
+windows are deleted. GUI tests require an active MATLAB desktop.
 
 Before measuring a full cycle, try three frames. Preview and edit both
 contours, accept one frame, skip one, and verify that the final frame still
